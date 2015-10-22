@@ -216,41 +216,6 @@ def make_dupliverts_real(scene):
         unselectAllObjects()
 
 
-# def findObjectForIpo(ipo):
-#     index = ipo.name.rfind('-')
-#     if index != -1:
-#         objname = ipo.name[index+1:]
-#         try:
-#             obj = self.config.scene.objects[objname]
-#             log("bake ipo %s to object %s" % (ipo.name, objname))
-#             return obj
-#         except:
-#             return None
-#
-#     for o in self.config.scene.objects:
-#         if o.getIpo() == ipo:
-#             log("bake ipo %s to object %s" % (ipo.name, o.name))
-#             return o
-#     return None
-#
-# def findMaterialForIpo(ipo):
-#     index = ipo.name.rfind('-')
-#     if index != -1:
-#         objname = ipo.name[index+1:]
-#         try:
-#             obj = bpy.data.materials[objname]
-#             log("bake ipo %s to material %s" % (ipo.name, objname))
-#             return obj
-#         except:
-#             return None
-#
-#     for o in bpy.data.materials:
-#         if o.getIpo() == ipo:
-#             log("bake ipo %s to material %s" % (ipo.name, o.name))
-#             return o
-#     return None
-
-
 def createAnimationUpdate(obj, callback, rotation_mode, prefix="", zero=False):
     has_location_keys = False
     has_scale_keys = False
@@ -351,9 +316,10 @@ def createAnimationsGenericObject(osg_object, blender_object, config, update_cal
                                                    unique_objects=unique_objects)
     anim = action2animation.createAnimation()
     if len(anim) > 0:
+        if blender_object.type == 'ARMATURE':
+            osg_object.update_callbacks = []
         osg_object.update_callbacks.append(update_callback)
     return anim
-
 
 def createAnimationMaterialAndSetCallback(osg_node, obj, config, unique_objects):
     osglog.log("Warning: [[blender]] Update material animations are not yet supported")
@@ -474,28 +440,6 @@ class Export(object):
             return obj.name
         return "no name"
 
-    def createAnimationsSkeletonObject(self, osg_object, blender_object):
-        if (self.config.export_anim is False) \
-           or (blender_object.animation_data is None) \
-           or (blender_object.animation_data.action is None):
-            return None
-
-        if self.unique_objects.hasAnimation(blender_object.animation_data.action):
-            return None
-        update_callback = createAnimationUpdate(blender_object, UpdateMatrixTransform(name=osg_object.name), blender_object.rotation_mode)
-        osglog.log("animation_data is {} {}".format(blender_object.name, blender_object.animation_data))
-
-        action2animation = BlenderAnimationToAnimation(object=blender_object,
-                                                       config=self.config,
-                                                       unique_objects=self.unique_objects)
-        osglog.log("animations created for object '{}'".format(blender_object.name))
-
-        anims = action2animation.createAnimation()
-        if len(anims) > 0 and update_callback:
-            osg_object.update_callbacks = []
-            osg_object.update_callbacks.append(update_callback)
-        return anims
-
     def createAnimationsObjectAndSetCallback(self, osg_object, blender_object):
         rotation_mode = 'QUATERNION' if self.config.use_quaternions else blender_object.rotation_mode
         return createAnimationsGenericObject(osg_object, blender_object, self.config,
@@ -527,7 +471,7 @@ class Export(object):
             osglog.log("Type of {} is {}".format(obj.name, obj.type))
             if obj.type == "ARMATURE":
                 item = self.createSkeleton(obj)
-                anims = self.createAnimationsSkeletonObject(item, obj)
+                anims = self.createAnimationsObjectAndSetCallback(item, obj)
 
             elif obj.type == "MESH" or obj.type == "EMPTY" or obj.type == "CAMERA":
                 # because it blender can insert inverse matrix, we have to recompute the parent child
