@@ -140,10 +140,14 @@ def createAnimationsGenericObject(osg_object, blender_object, config, update_cal
     if unique_objects.hasAnimation(blender_object.animation_data.action):
         return None
 
+    has_action = hasAction(blender_object)
+    has_constraints = hasConstraints(blender_object)
     action2animation = BlenderAnimationToAnimation(object=blender_object,
                                                    config=config,
-                                                   unique_objects=unique_objects)
-    anim = action2animation.createAnimation()
+                                                   unique_objects=unique_objects,
+                                                   has_action=has_action,
+                                                   has_constraints=has_constraints)
+    anim = action2animation.createAnimation(blender_object.name)
     if len(anim) > 0:
         if blender_object.type == 'ARMATURE':
             osg_object.update_callbacks = []
@@ -1681,33 +1685,34 @@ class BlenderAnimationToAnimation(object):
         self.animations = None
         self.action = None
         self.action_name = None
+        self.has_action = kwargs.get("has_action", False)
+        self.has_constraints = kwargs.get("has_constraints", False)
 
-    def handleAnimationBaking(self):
-        need_bake = False
-        if hasattr(self.object, "constraints") and (len(self.object.constraints) > 0) and self.config.bake_constraints:
+    def needBake(self, blender_object):
+        if self.has_constraints and self.config.bake_constraints:
             osglog.log("Baking constraints " + str(self.object.constraints))
-            need_bake = True
+            return True
         else:
-            if hasattr(self.object, "animation_data") and hasattr(self.object.animation_data, "action"):
+            if self.has_action:
                 self.action = self.object.animation_data.action
                 for fcu in self.action.fcurves:
                     for kf in fcu.keyframe_points:
                         if kf.interpolation != 'LINEAR':
-                            need_bake = True
-
-        if self.config.bake_animations or need_bake:
-            self.action = osgbake.bakeAnimation(self.config.scene, self.object,
-                                                use_quaternions=self.config.use_quaternions)
-            self.action_name = self.action.name
+                            return True
+        return False
 
     def createAnimation(self, target=None):
         osglog.log("Exporting animation on object {}".format(self.object))
-        if hasattr(self.object, "animation_data") and \
-           hasattr(self.object.animation_data, "action") and \
-           self.object.animation_data.action is not None:
+        if self.has_action:
             self.action_name = self.object.animation_data.action.name
 
-        self.handleAnimationBaking()
+        # Bake animation if needed
+        if self.config.bake_animations or self.needBake(self.object):
+            self.action = osgbake.bakeAnimation(self.config.scene, self.object,
+                                                use_quaternions=self.config.use_quaternions,
+                                                has_action=self.has_action)
+
+            self.action_name = self.action.name
 
         if target is None:
             target = self.object.name
