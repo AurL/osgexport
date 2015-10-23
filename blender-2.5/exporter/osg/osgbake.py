@@ -247,7 +247,7 @@ def bakeAction(frame_start,
     return action
 
 
-def bakeAnimation(scene, blender_object, use_quaternions=False):
+def bakeAnimation(scene, blender_object, use_quaternions=False, has_action=False):
     # baking will replace the current action but we want to keep scene unchanged
     if blender_object.animation_data and blender_object.animation_data.action:
         original_action = blender_object.animation_data.action
