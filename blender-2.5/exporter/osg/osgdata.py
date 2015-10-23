@@ -45,13 +45,13 @@ Vector = mathutils.Vector
 Quaternion = mathutils.Quaternion
 
 
-def createAnimationUpdate(obj, callback, rotation_mode, prefix="", zero=False):
+def createAnimationUpdate(blender_object, callback, rotation_mode, prefix="", zero=False):
     has_location_keys = False
     has_scale_keys = False
     has_rotation_keys = False
 
-    if obj.animation_data:
-        action = obj.animation_data.action
+    if blender_object.animation_data:
+        action = blender_object.animation_data.action
 
         if action:
             for curve in action.fcurves:
@@ -66,7 +66,7 @@ def createAnimationUpdate(obj, callback, rotation_mode, prefix="", zero=False):
                 if datapath == "scale":
                     has_scale_keys = True
 
-    if not (has_location_keys or has_scale_keys or has_rotation_keys) and (len(obj.constraints) == 0):
+    if not (has_location_keys or has_scale_keys or has_rotation_keys) and (len(blender_object.constraints) == 0):
         return None
 
     if zero:
@@ -81,9 +81,9 @@ def createAnimationUpdate(obj, callback, rotation_mode, prefix="", zero=False):
                                      StackedRotateAxisElement(name="euler_y", axis=Vector((0, 1, 0)), angle=0),
                                      StackedRotateAxisElement(name="euler_z", axis=Vector((0, 0, 1)), angle=0)]
 
-                    callback.stacked_transforms.append(rotation_keys[ord(obj.rotation_mode[2]) - ord('X')])
-                    callback.stacked_transforms.append(rotation_keys[ord(obj.rotation_mode[1]) - ord('X')])
-                    callback.stacked_transforms.append(rotation_keys[ord(obj.rotation_mode[0]) - ord('X')])
+                    callback.stacked_transforms.append(rotation_keys[ord(blender_object.rotation_mode[2]) - ord('X')])
+                    callback.stacked_transforms.append(rotation_keys[ord(blender_object.rotation_mode[1]) - ord('X')])
+                    callback.stacked_transforms.append(rotation_keys[ord(blender_object.rotation_mode[0]) - ord('X')])
 
                 if rotation_mode == "QUATERNION":
                     q = StackedQuaternionElement()
@@ -96,38 +96,38 @@ def createAnimationUpdate(obj, callback, rotation_mode, prefix="", zero=False):
                                                                                 angle=0))
         if has_scale_keys:
             sc = StackedScaleElement()
-            sc.scale = Vector(obj.scale)
+            sc.scale = Vector(blender_object.scale)
             callback.stacked_transforms.append(sc)
 
     else:
         tr = StackedTranslateElement()
-        tr.translate = Vector(obj.location)
+        tr.translate = Vector(blender_object.location)
         callback.stacked_transforms.append(tr)
 
         if rotation_mode in ["XYZ", "XYZ", "XZY", "YXZ", "YZX", "ZXY", "ZYX"]:
             rotation_keys = [StackedRotateAxisElement(name="euler_x", axis=Vector((1, 0, 0)),
-                                                      angle=obj.rotation_euler[0]),
+                                                      angle=blender_object.rotation_euler[0]),
                              StackedRotateAxisElement(name="euler_y", axis=Vector((0, 1, 0)),
-                                                      angle=obj.rotation_euler[1]),
+                                                      angle=blender_object.rotation_euler[1]),
                              StackedRotateAxisElement(name="euler_z", axis=Vector((0, 0, 1)),
-                                                      angle=obj.rotation_euler[2])]
+                                                      angle=blender_object.rotation_euler[2])]
 
-            callback.stacked_transforms.append(rotation_keys[ord(obj.rotation_mode[2]) - ord('X')])
-            callback.stacked_transforms.append(rotation_keys[ord(obj.rotation_mode[1]) - ord('X')])
-            callback.stacked_transforms.append(rotation_keys[ord(obj.rotation_mode[0]) - ord('X')])
+            callback.stacked_transforms.append(rotation_keys[ord(blender_object.rotation_mode[2]) - ord('X')])
+            callback.stacked_transforms.append(rotation_keys[ord(blender_object.rotation_mode[1]) - ord('X')])
+            callback.stacked_transforms.append(rotation_keys[ord(blender_object.rotation_mode[0]) - ord('X')])
 
         if rotation_mode == "QUATERNION":
             q = StackedQuaternionElement()
-            q.quaternion = obj.rotation_quaternion
+            q.quaternion = blender_object.rotation_quaternion
             callback.stacked_transforms.append(q)
 
         if rotation_mode == "AXIS_ANGLE":
             callback.stacked_transforms.append(StackedRotateAxisElement(name="axis_angle",
-                                                                        axis=Vector(obj.rotation_axis_angle[0:2]),
-                                                                        angle=obj.rotation_axis_angle[3]))
+                                                                        axis=Vector(blender_object.rotation_axis_angle[0:2]),
+                                                                        angle=blender_object.rotation_axis_angle[3]))
 
         sc = StackedScaleElement()
-        sc.scale = Vector(obj.scale)
+        sc.scale = Vector(blender_object.scale)
         callback.stacked_transforms.append(sc)
 
     return callback
@@ -147,13 +147,16 @@ def createAnimationsGenericObject(osg_object, blender_object, config, update_cal
 
     has_action = hasAction(blender_object)
     has_constraints = hasConstraints(blender_object)
+
+    if not has_action:
+        return None
+
     action2animation = BlenderAnimationToAnimation(object=blender_object,
                                                    config=config,
                                                    unique_objects=unique_objects,
                                                    has_action=has_action,
                                                    has_constraints=has_constraints)
     anim = action2animation.createAnimation()
-
     if len(anim) > 0 and update_callback:
         if blender_object.type == 'ARMATURE':
             osg_object.update_callbacks = []
@@ -161,10 +164,10 @@ def createAnimationsGenericObject(osg_object, blender_object, config, update_cal
     return anim
 
 
-def createAnimationMaterialAndSetCallback(osg_node, obj, config, unique_objects):
+def createAnimationMaterialAndSetCallback(osg_node, blender_object, config, unique_objects):
     osglog.log("Warning: [[blender]] Update material animations are not yet supported")
     return None
-    # return createAnimationsGenericObject(osg_node, obj, config, UpdateMaterial(), uniq_anims)
+    # return createAnimationsGenericObject(osg_node, blender_object, config, UpdateMaterial(), uniq_anims)
 
 
 class UniqueObject(object):
@@ -174,55 +177,55 @@ class UniqueObject(object):
         self.objects = {}
         self.anims = {}
 
-    def hasAnimation(self, obj):
-        return obj in self.anims
+    def hasAnimation(self, blender_object):
+        return blender_object in self.anims
 
-    def getAnimation(self, obj):
-        if self.hasAnimation(obj):
-            return self.anims[obj]
+    def getAnimation(self, blender_object):
+        if self.hasAnimation(blender_object):
+            return self.anims[blender_object]
         return None
 
-    def registerAnimation(self, obj, reg):
-        self.anims[obj] = reg
+    def registerAnimation(self, blender_object, reg):
+        self.anims[blender_object] = reg
 
-    def hasObject(self, obj):
-        return obj in self.objects
+    def hasObject(self, blender_object):
+        return blender_object in self.objects
 
-    def getObject(self, obj):
-        if self.hasObject(obj):
-            return self.objects[obj]
+    def getObject(self, blender_object):
+        if self.hasObject(blender_object):
+            return self.objects[blender_object]
         return None
 
-    def registerObject(self, obj, reg):
-        self.objects[obj] = reg
+    def registerObject(self, blender_object, reg):
+        self.objects[blender_object] = reg
 
-    def hasTexture(self, obj):
-        return obj in self.textures
+    def hasTexture(self, blender_object):
+        return blender_object in self.textures
 
-    def getTexture(self, obj):
-        if self.hasTexture(obj):
-            return self.textures[obj]
+    def getTexture(self, blender_object):
+        if self.hasTexture(blender_object):
+            return self.textures[blender_object]
         return None
 
-    def registerTexture(self, obj, reg):
-        self.textures[obj] = reg
+    def registerTexture(self, blender_object, reg):
+        self.textures[blender_object] = reg
 
-    def hasStateSet(self, obj):
-        return obj in self.statesets
+    def hasStateSet(self, blender_object):
+        return blender_object in self.statesets
 
-    def getStateSet(self, obj):
-        if self.hasStateSet(obj):
-            return self.statesets[obj]
+    def getStateSet(self, blender_object):
+        if self.hasStateSet(blender_object):
+            return self.statesets[blender_object]
         return None
 
-    def registerStateSet(self, obj, reg):
-        self.statesets[obj] = reg
+    def registerStateSet(self, blender_object, reg):
+        self.statesets[blender_object] = reg
 
 
 class Export(object):
     def __init__(self, config=None):
         object.__init__(self)
-        self.items = []
+        self.osg_objects = []
         self.config = config
         if self.config is None:
             self.config = osgconf.Config()
@@ -234,8 +237,8 @@ class Export(object):
         self.root = None
         self.unique_objects = UniqueObject()
 
-    def isExcluded(self, obj):
-        return obj.name in self.config.exclude_objects
+    def isExcluded(self, blender_object):
+        return blender_object.name in self.config.exclude_objects
 
     def setArmatureInRestMode(self):
         for arm in bpy.data.objects:
@@ -249,147 +252,155 @@ class Export(object):
         for arm in self.rest_armatures:
             arm.data.pose_position = 'POSE'
 
-    def exportItemAndChildren(self, obj):
-        item = self.exportChildrenRecursively(obj, None, None)
-        if item is not None:
-            self.items.append(item)
+    def exportItemAndChildren(self, blender_object):
+        osg_object = self.exportChildrenRecursively(blender_object, None, None)
+        if osg_object is not None:
+            self.osg_objects.append(osg_object)
 
-    def evaluateGroup(self, obj, item, rootItem):
-        if obj.dupli_group is None or len(obj.dupli_group.objects) == 0:
+    def evaluateGroup(self, blender_object, osg_object, rootItem):
+        if blender_object.dupli_group is None or len(blender_object.dupli_group.objects) == 0:
             return
 
-        osglog.log("resolving {} for {} offset {}".format(obj.dupli_group.name,
-                                                          obj.name,
-                                                          obj.dupli_group.dupli_offset))
+        osglog.log("resolving {} for {} offset {}".format(blender_object.dupli_group.name,
+                                                          blender_object.name,
+                                                          blender_object.dupli_group.dupli_offset))
 
         group = MatrixTransform()
-        group.matrix = Matrix.Translation(-obj.dupli_group.dupli_offset)
-        item.children.append(group)
+        group.matrix = Matrix.Translation(-blender_object.dupli_group.dupli_offset)
+        osg_object.children.append(group)
 
         # for group we disable the only visible
         config_visible = self.config.only_visible
         self.config.only_visible = False
-        for o in obj.dupli_group.objects:
+        for o in blender_object.dupli_group.objects:
             osglog.log("object {}".format(o))
             self.exportChildrenRecursively(o, group, rootItem)
         self.config.only_visible = config_visible
         # and restore it after processing group
 
-    def getName(self, obj):
-        if hasattr(obj, "name"):
-            return obj.name
+    def getName(self, blender_object):
+        if hasattr(blender_object, "name"):
+            return blender_object.name
         return "no name"
 
-    def createAnimationsObjectAndSetCallback(self, osg_object, blender_object):
-        return createAnimationsGenericObject(osg_object, blender_object, self.config,
-                                             createAnimationUpdate(blender_object,
-                                                                   UpdateMatrixTransform(name=osg_object.name),
-                                                                   blender_object.rotation_mode),
-                                             self.unique_objects)
+    def isObjectVisible(self, blender_object):
+        return blender_object.is_visible(self.config.scene) or not self.config.only_visible
 
-    def isObjectVisible(self, obj):
-        return obj.is_visible(self.config.scene) or not self.config.only_visible
-
-    def exportChildrenRecursively(self, obj, parent, rootItem):
+    def exportChildrenRecursively(self, blender_object, parent, osg_root):
         # We skip the object if it is in the excluded objects list
-        if self.isExcluded(obj):
+        if self.isExcluded(blender_object):
             return None
 
         # Check if the object is visible. The visibility will be used for meshes and lights
         # to determine if we keep it or not. Other objects have to be taken into account even if they
         # are not visible as they can be used as modifiers (avoiding some crashs during the export)
-        is_visible = self.isObjectVisible(obj)
+        is_visible = self.isObjectVisible(blender_object)
         osglog.log("")
 
         anims = []
-        item = None
-        if self.unique_objects.hasObject(obj):
-            osglog.log("use referenced item for {} {}".format(obj.name, obj.type))
-            item = self.unique_objects.getObject(obj)
+        osg_object = None
+        if self.unique_objects.hasObject(blender_object):
+            osglog.log("use referenced osg object for {} {}".format(blender_object.name, blender_object.type))
+            osg_object = self.unique_objects.getObject(blender_object)
         else:
-            osglog.log("Type of {} is {}".format(obj.name, obj.type))
-            if obj.type == "ARMATURE":
-                item = self.createSkeleton(obj)
-                anims = self.createAnimationsObjectAndSetCallback(item, obj)
+            osglog.log("Type of {} is {}".format(blender_object.name, blender_object.type))
+            if blender_object.type == "ARMATURE":
+                osg_object = self.createSkeleton(blender_object)
+                anims = createAnimationsGenericObject(osg_object, blender_object, self.config,
+                                               createAnimationUpdate(blender_object,
+                                                                     UpdateMatrixTransform(name=osg_object.name),
+                                                                     blender_object.rotation_mode),
+                                               self.unique_objects)
 
-            elif obj.type == "MESH" or obj.type == "EMPTY" or obj.type == "CAMERA":
+            elif blender_object.type in ['MESH', 'EMPTY', 'CAMERA']:
                 # because it blender can insert inverse matrix, we have to recompute the parent child
                 # matrix for our use. Not if an armature we force it to be in rest position to compute
                 # matrix in the good space
-                matrix = getDeltaMatrixFrom(obj.parent, obj)
-                item = MatrixTransform()
-                item.setName(obj.name)
+                matrix = getDeltaMatrixFrom(blender_object.parent, blender_object)
+                osg_object = MatrixTransform()
+                osg_object.setName(blender_object.name)
 
-                item.matrix = matrix.copy()
+                osg_object.matrix = matrix.copy()
                 if self.config.zero_translations and parent is None:
                     if bpy.app.version[0] >= 2 and bpy.app.version[1] >= 62:
                         print("zero_translations option has not been converted to blender 2.62")
                     else:
-                        item.matrix[3].xyz = Vector()
+                        osg_object.matrix[3].xyz = Vector()
 
-                anims = self.createAnimationsObjectAndSetCallback(item, obj)
+                anims = createAnimationsGenericObject(osg_object, blender_object, self.config,
+                                               createAnimationUpdate(blender_object,
+                                                                     UpdateMatrixTransform(name=osg_object.name),
+                                                                     blender_object.rotation_mode),
+                                               self.unique_objects)
 
                 if is_visible:
-                    if obj.type == "MESH":
-                        objectItem = self.createGeodeFromObject(obj)
-                        item.children.append(objectItem)
+                    if blender_object.type == "MESH":
+                        osg_geode = self.createGeodeFromObject(blender_object)
+                        osg_object.children.append(osg_geode)
                     else:
-                        self.evaluateGroup(obj, item, rootItem)
+                        self.evaluateGroup(blender_object, osg_object, osg_root)
 
-            elif obj.type == "LAMP" and is_visible:
-                matrix = getDeltaMatrixFrom(obj.parent, obj)
-                item = MatrixTransform()
-                item.setName(obj.name)
-                item.matrix = matrix
-                lightItem = self.createLight(obj)
-                anims = self.createAnimationsObjectAndSetCallback(item, obj)
-                item.children.append(lightItem)
+            elif blender_object.type == "LAMP" and is_visible:
+                matrix = getDeltaMatrixFrom(blender_object.parent, blender_object)
+                osg_object = MatrixTransform()
+                osg_object.setName(blender_object.name)
+                osg_object.matrix = matrix
+                lightItem = self.createLight(blender_object)
+                anims = createAnimationsGenericObject(osg_object, blender_object, self.config,
+                                               createAnimationUpdate(blender_object,
+                                                                     UpdateMatrixTransform(name=osg_object.name),
+                                                                     blender_object.rotation_mode),
+                                               self.unique_objects)
+                osg_object.children.append(lightItem)
 
             else:
-                osglog.log("Warning: [[blender]] The object {} (type {}) was not exported".format(obj.name, obj.type))
+                osglog.log("Warning: [[blender]] The object {} (type {}) was not exported"
+                           .format(blender_object.name, blender_object.type))
                 return None
 
-            self.unique_objects.registerObject(obj, item)
+            self.unique_objects.registerObject(blender_object, osg_object)
 
         if anims is not None:
             self.animations += [a for a in anims if a is not None]
 
-        if rootItem is None:
-            rootItem = item
+        if osg_root is None:
+            osg_root = osg_object
 
-        if obj.parent_type == "BONE":
-            bone = findBoneInHierarchy(rootItem, obj.parent_bone)
+        if blender_object.parent_type == "BONE":
+            bone = findBoneInHierarchy(osg_root, blender_object.parent_bone)
             if bone is None:
-                osglog.log("Warning: [[blender]] {} not found".format(obj.parent_bone))
+                osglog.log("Warning: [[blender]] {} not found".format(blender_object.parent_bone))
             else:
-                armature = obj.parent.data
+                armature = blender_object.parent.data
                 original_pose_position = armature.pose_position
                 armature.pose_position = 'REST'
 
-                boneInWorldSpace = obj.parent.matrix_world * armature.bones[obj.parent_bone].matrix_local
-                matrix = getDeltaMatrixFromMatrix(boneInWorldSpace, obj.matrix_world)
-                item.matrix = matrix
-                bone.children.append(item)
+                boneInWorldSpace = blender_object.parent.matrix_world \
+                    * armature.bones[blender_object.parent_bone].matrix_local
+
+                matrix = getDeltaMatrixFromMatrix(boneInWorldSpace, blender_object.matrix_world)
+                osg_object.matrix = matrix
+                bone.children.append(osg_object)
 
                 armature.pose_position = original_pose_position
 
         elif parent:
-            parent.children.append(item)
+            parent.children.append(osg_object)
 
-        children = getChildrenOf(self.config.scene, obj)
+        children = getChildrenOf(self.config.scene, blender_object)
         for child in children:
-            self.exportChildrenRecursively(child, item, rootItem)
-        return item
+            self.exportChildrenRecursively(child, osg_object, osg_root)
+        return osg_object
 
-    def createSkeleton(self, obj):
-        osglog.log("processing Armature {}".format(obj.name))
+    def createSkeleton(self, blender_object):
+        osglog.log("processing Armature {}".format(blender_object.name))
 
-        roots = getRootBonesList(obj.data)
+        roots = getRootBonesList(blender_object.data)
 
-        matrix = getDeltaMatrixFrom(obj.parent, obj)
-        skeleton = Skeleton(obj.name, matrix)
+        matrix = getDeltaMatrixFrom(blender_object.parent, blender_object)
+        skeleton = Skeleton(blender_object.name, matrix)
         for bone in roots:
-            b = Bone(obj, bone)
+            b = Bone(blender_object, bone)
             b.buildBoneChildren()
             skeleton.children.append(b)
         skeleton.collectBones()
@@ -488,40 +499,40 @@ class Export(object):
     # OSG requires that rig geometry be a child of the skeleton,
     # but Blender does not.  Move any meshes that are modified by
     # an armature to be under the armature.
-    def reparentRiggedGeodes(self, item, parent):
-        if isinstance(item, MatrixTransform) \
-           and len(item.children) == 1 \
-           and isinstance(item.children[0], Geode) \
+    def reparentRiggedGeodes(self, osg_object, parent):
+        if isinstance(osg_object, MatrixTransform) \
+           and len(osg_object.children) == 1 \
+           and isinstance(osg_object.children[0], Geode) \
            and not isinstance(parent, Skeleton):
-            geode = item.children[0]
+            geode = osg_object.children[0]
             osglog.log("geode {}".format(geode.name))
 
             # some blend files has a armature_modifier but a None object
             # so we have to test armature_modifier and armature_modifier.object
             if geode.armature_modifier is not None and geode.armature_modifier.object:
-                parent.children.remove(item)
-                modifier_object = item.children[0].armature_modifier.object
+                parent.children.remove(osg_object)
+                modifier_object = osg_object.children[0].armature_modifier.object
 
                 arm = self.unique_objects.getObject(modifier_object)
-                for (k, v) in self.unique_objects.objects.items():
-                    if v == item:
+                for (k, v) in self.unique_objects.objects.osg_objects():
+                    if v == osg_object:
                         meshobj = k
 
-                item.matrix = getDeltaMatrixFromMatrix(item.children[0].armature_modifier.object.matrix_world,
+                osg_object.matrix = getDeltaMatrixFromMatrix(osg_object.children[0].armature_modifier.object.matrix_world,
                                                        meshobj.matrix_world)
 
-                arm.children.append(item)
+                arm.children.append(osg_object)
                 osglog.log("NOTICE: Reparenting {} to {}".format(geode.name, arm.name))
-        if hasattr(item, "children"):
-            for c in list(item.children):
-                self.reparentRiggedGeodes(c, item)
+        if hasattr(osg_object, "children"):
+            for c in list(osg_object.children):
+                self.reparentRiggedGeodes(c, osg_object)
 
     def postProcess(self):
         # set only one root to the scene
         self.root = None
         self.root = Group()
         self.root.setName("Root")
-        self.root.children = self.items
+        self.root.children = self.osg_objects
         if len(self.animations) > 0:
             animation_manager = BasicAnimationManager()
             animation_manager.animations = self.animations
@@ -563,7 +574,7 @@ class Export(object):
                     self.images.add(i)
 
     def write(self):
-        if len(self.items) == 0:
+        if len(self.osg_objects) == 0:
             if self.config.log_file is not None:
                 self.config.closeLogfile()
             return
@@ -722,8 +733,8 @@ class Export(object):
         self.unique_objects.registerObject(mesh_object, geode)
         return geode
 
-    def createLight(self, obj):
-        converter = BlenderLightToLightSource(lamp=obj)
+    def createLight(self, blender_object):
+        converter = BlenderLightToLightSource(lamp=blender_object)
         lightsource = converter.convert()
         self.lights[lightsource.name] = lightsource  # will be used to index lightnum at the end
         return lightsource
@@ -1503,7 +1514,7 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
         #        log( "Warning: [[blender]] " + str(i) +
         #             " has not vertices, skip it, if really unsued you should clean it")
         #    else:
-        #        vertex_weight_list = [ list(e) for e in verts.items() ]
+        #        vertex_weight_list = [ list(e) for e in verts.osg_objects() ]
         #        vg = VertexGroup()
         #        vg.targetGroupName = i
         #        vg.vertexes = vertex_weight_list
@@ -1707,7 +1718,7 @@ class BlenderAnimationToAnimation(object):
         return False
 
     def createAnimation(self, target=None):
-        osglog.log("Exporting animation on object {}".format(self.object))
+        osglog.log("Exporting animation on object {}".format(self.object.name))
         if self.has_action:
             self.action_name = self.object.animation_data.action.name
 
