@@ -43,6 +43,7 @@ Euler = mathutils.Euler
 Matrix = mathutils.Matrix
 Vector = mathutils.Vector
 Quaternion = mathutils.Quaternion
+Log = osglog.log
 
 
 def createAnimationUpdate(obj, callback, rotation_mode, prefix="", zero=False):
@@ -56,7 +57,7 @@ def createAnimationUpdate(obj, callback, rotation_mode, prefix="", zero=False):
         if action:
             for curve in action.fcurves:
                 datapath = curve.data_path[len(prefix):]
-                osglog.log("curve.data_path {} {} {}".format(curve.data_path, curve.array_index, datapath))
+                Log("curve.data_path {} {} {}".format(curve.data_path, curve.array_index, datapath))
                 if datapath == "location":
                     has_location_keys = True
 
@@ -164,7 +165,7 @@ def createAnimationsObject(osg_object, blender_object, config, update_callback, 
 
 
 def createAnimationMaterialAndSetCallback(osg_node, obj, config, unique_objects):
-    osglog.log("Warning: [[blender]] Update material animations are not yet supported")
+    Log("Warning: [[blender]] Update material animations are not yet supported")
     return None
     # return createAnimationsObject(osg_node, obj, config, UpdateMaterial(), uniq_anims)
 
@@ -260,9 +261,9 @@ class Export(object):
         if obj.dupli_group is None or len(obj.dupli_group.objects) == 0:
             return
 
-        osglog.log("resolving {} for {} offset {}".format(obj.dupli_group.name,
-                                                          obj.name,
-                                                          obj.dupli_group.dupli_offset))
+        Log("resolving {} for {} offset {}".format(obj.dupli_group.name,
+                                                   obj.name,
+                                                   obj.dupli_group.dupli_offset))
 
         group = MatrixTransform()
         group.matrix = Matrix.Translation(-obj.dupli_group.dupli_offset)
@@ -272,7 +273,7 @@ class Export(object):
         config_visible = self.config.only_visible
         self.config.only_visible = False
         for o in obj.dupli_group.objects:
-            osglog.log("object {}".format(o))
+            Log("object {}".format(o))
             self.exportChildrenRecursively(o, group, rootItem)
         self.config.only_visible = config_visible
         # and restore it after processing group
@@ -342,7 +343,7 @@ class Export(object):
         def handleBoneChild(blender_object, osg_object):
             bone = findBoneInHierarchy(osg_root, blender_object.parent_bone)
             if bone is None:
-                osglog.log("Warning: [[blender]] {} not found".format(blender_object.parent_bone))
+                Log("Warning: [[blender]] {} not found".format(blender_object.parent_bone))
             else:
                 armature = blender_object.parent.data
                 original_pose_position = armature.pose_position
@@ -365,7 +366,7 @@ class Export(object):
         # to determine if we keep it or not. Other objects have to be taken into account even if they
         # are not visible as they can be used as modifiers (avoiding some crashs during the export)
         is_visible = self.isObjectVisible(blender_object)
-        osglog.log("")
+        Log("")
 
         # Force rotation mode to quaternions for animation baking
         rotation_mode = 'QUATERNION' if self.config.use_quaternions else blender_object.rotation_mode
@@ -373,10 +374,10 @@ class Export(object):
         anims = []
         osg_object = None
         if self.unique_objects.hasObject(blender_object):
-            osglog.log("use referenced item for {} {}".format(blender_object.name, blender_object.type))
+            Log("{} '{}' has already been parsed, reuse osg_object".format(blender_object.type, blender_object.name))
             osg_object = self.unique_objects.getObject(blender_object)
         else:
-            osglog.log("Type of {} is {}".format(blender_object.name, blender_object.type))
+            Log("Parsing object '{}' of type {}".format(blender_object.name, blender_object.type))
 
             if blender_object.type == "ARMATURE":
                 osg_object, anims = parseArmature(blender_object)
@@ -385,8 +386,8 @@ class Export(object):
             elif blender_object.type in ['MESH', 'EMPTY', 'CAMERA']:
                 osg_object, anims = parseBlenderObject(blender_object, is_visible)
             else:
-                osglog.log("Warning: [[blender]] The object {} (type {}) was not exported"
-                           .format(blender_object.name, blender_object.type))
+                Log("Warning: [[blender]] Skipping object {} (objects {} are not exported)"
+                    .format(blender_object.name, blender_object.type))
                 return None
 
             self.unique_objects.registerObject(blender_object, osg_object)
@@ -409,7 +410,7 @@ class Export(object):
         return osg_object
 
     def createSkeleton(self, blender_object):
-        osglog.log("processing Armature {}".format(blender_object.name))
+        Log("processing Armature {}".format(blender_object.name))
 
         roots = getRootBonesList(blender_object.data)
 
@@ -485,7 +486,7 @@ class Export(object):
 
         # Object.resetWriter()
         self.scene_name = self.config.scene.name
-        osglog.log("current scene {}".format(self.scene_name))
+        Log("current scene {}".format(self.scene_name))
         if self.config.validFilename() is False:
             self.config.filename += self.scene_name
         self.config.createLogfile()
@@ -498,12 +499,12 @@ class Export(object):
                     self.config.scene.objects.active = o
                     self.config.scene.objects.selected = [o]
                 except ValueError:
-                    osglog.log("Error, problem happens when assigning object {} to scene {}"
-                               .format(o.name, self.config.scene.name))
+                    Log("Error, problem happens when assigning object {} to scene {}"
+                        .format(o.name, self.config.scene.name))
                     raise
 
             for obj in self.config.scene.objects:
-                osglog.log("obj {}".format(obj.name))
+                Log("obj {}".format(obj.name))
                 if (self.config.selected == "SELECTED_ONLY_WITH_CHILDREN" and obj.select) or \
                    (self.config.selected == "ALL" and obj.parent is None):
                     self.exportItemAndChildren(obj)
@@ -521,7 +522,7 @@ class Export(object):
            and isinstance(item.children[0], Geode) \
            and not isinstance(parent, Skeleton):
             geode = item.children[0]
-            osglog.log("geode {}".format(geode.name))
+            Log("geode {}".format(geode.name))
 
             # some blend files has a armature_modifier but a None object
             # so we have to test armature_modifier and armature_modifier.object
@@ -538,7 +539,7 @@ class Export(object):
                                                        meshobj.matrix_world)
 
                 arm.children.append(item)
-                osglog.log("NOTICE: Reparenting {} to {}".format(geode.name, arm.name))
+                Log("NOTICE: Reparenting {} to {}".format(geode.name, arm.name))
         if hasattr(item, "children"):
             for c in list(item.children):
                 self.reparentRiggedGeodes(c, item)
@@ -561,7 +562,7 @@ class Export(object):
             st = StateSet()
             self.root.stateset = st
             if len(self.lights) > 8:
-                osglog.log("Warning: [[blender]] The model has more than 8 lights")
+                Log("Warning: [[blender]] The model has more than 8 lights")
 
             # retrieve world to global ambient
             lm = LightModel()
@@ -596,7 +597,7 @@ class Export(object):
             return
 
         filename = self.config.getFullName("osgt")
-        osglog.log("write file to {}".format(filename))
+        Log("write file to {}".format(filename))
         with open(filename, "wb") as sfile:
             # sfile.write(str(self.root).encode('utf-8'))
             self.root.writeFile(sfile)
@@ -608,7 +609,7 @@ class Export(object):
                 if not os.path.exists(nativePath):
                     os.mkdir(nativePath)
             except:
-                osglog.log("can't create textures directory {}".format(nativePath))
+                Log("can't create textures directory {}".format(nativePath))
                 raise
 
         copied_images = []
@@ -627,11 +628,11 @@ class Export(object):
                                 # cleaned up
                                 copied_images.append(filename)
                             i.filepath_raw = filename
-                            osglog.log("packed file, save it to {}"
-                                       .format(os.path.abspath(bpy.path.abspath(filename))))
+                            Log("packed file, save it to {}"
+                                .format(os.path.abspath(bpy.path.abspath(filename))))
                             i.save()
                         except:
-                            osglog.log("failed to save file {} to {}".format(imagename, nativePath))
+                            Log("failed to save file {} to {}".format(imagename, nativePath))
                         i.filepath_raw = original_filepath
                     else:
                         filepath = os.path.abspath(bpy.path.abspath(i.filepath))
@@ -642,11 +643,11 @@ class Export(object):
                                 # cleaned up
                                 copied_images.append(texturePath)
                             shutil.copy(filepath, texturePath)
-                            osglog.log("copy file {} to {}".format(filepath, texturePath))
+                            Log("copy file {} to {}".format(filepath, texturePath))
                         else:
-                            osglog.log("file {} not available".format(filepath))
+                            Log("file {} not available".format(filepath))
                 except Exception as e:
-                    osglog.log("error while trying to copy file {} to {}: {}".format(imagename, nativePath, e))
+                    Log("error while trying to copy file {} to {}: {}".format(imagename, nativePath, e))
 
         filetoview = self.config.getFullName("osgt")
         if self.config.osgconv_to_ive:
@@ -680,7 +681,7 @@ class Export(object):
             self.config.closeLogfile()
 
     def createGeodeFromObject(self, mesh, skeleton=None):
-        osglog.log("exporting object {}".format(mesh.name))
+        Log("exporting object {}".format(mesh.name))
 
         # check if the mesh has a armature modifier
         # if no we don't write influence
@@ -706,7 +707,7 @@ class Export(object):
         else:
             mesh_object = mesh.data
 
-        osglog.log("mesh_object is {}".format(mesh_object.name))
+        Log("mesh_object is {}".format(mesh_object.name))
 
         if self.unique_objects.hasObject(mesh_object):
             return self.unique_objects.getObject(mesh_object)
@@ -725,7 +726,7 @@ class Export(object):
                                             unique_objects=self.unique_objects)
         sources_geometries = converter.convert()
 
-        osglog.log("vertex groups {} {} ".format(exportInfluence, hasVertexGroup))
+        Log("vertex groups {} {} ".format(exportInfluence, hasVertexGroup))
         if exportInfluence and hasVertexGroup:
             for geom in sources_geometries:
                 rig_geom = RigGeometry()
@@ -860,7 +861,7 @@ class BlenderObjectToGeometry(object):
         except:
             image_object = None
         if image_object is None:
-            osglog.log("Warning: [[blender]] The texture {} is skipped since it has no Image".format(mtex))
+            Log("Warning: [[blender]] The texture {} is skipped since it has no Image".format(mtex))
             return None
 
         if self.unique_objects.hasTexture(mtex.texture):
@@ -883,7 +884,7 @@ class BlenderObjectToGeometry(object):
         except:
             image_object = None
         if image_object is None:
-            osglog.log("Warning: [[blender]] The texture node {} is skipped since it has no Image".format(node))
+            Log("Warning: [[blender]] The texture node {} is skipped since it has no Image".format(node))
             return None
 
         if self.unique_objects.hasTexture(node):
@@ -903,12 +904,12 @@ class BlenderObjectToGeometry(object):
 
         uvs = geom.uvs
         if DEBUG:
-            osglog.log("geometry uvs {}".format(uvs))
+            Log("geometry uvs {}".format(uvs))
         geom.uvs = {}
 
         texture_list = material.texture_slots
         if DEBUG:
-            osglog.log("texture list {} - {}".format(len(texture_list), texture_list))
+            Log("texture list {} - {}".format(len(texture_list), texture_list))
 
         # find a default channel if exist uv
         default_uv = None
@@ -918,28 +919,28 @@ class BlenderObjectToGeometry(object):
             default_uv = uvs[default_uv_key]
 
         if DEBUG:
-            osglog.log("default uv key {}".format(default_uv_key))
+            Log("default uv key {}".format(default_uv_key))
 
         for texture_id, texture_slot in enumerate(texture_list):
             if texture_slot is not None:
                 uv_layer = texture_slot.uv_layer
 
                 if DEBUG:
-                    osglog.log("uv layer {}".format(uv_layer))
+                    Log("uv layer {}".format(uv_layer))
 
                 if len(uv_layer) > 0 and uv_layer not in uvs.keys():
-                    osglog.log("Warning: [[blender]] The material '{}' with texture '{}'\
+                    Log("Warning: [[blender]] The material '{}' with texture '{}'\
 use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv channel as fallback"
-                               .format(material.name, texture_slot, uv_layer, geom.name))
+                        .format(material.name, texture_slot, uv_layer, geom.name))
                 if len(uv_layer) > 0 and uv_layer in uvs.keys():
                     if DEBUG:
-                        osglog.log("texture {} use uv layer {}".format(i, uv_layer))
+                        Log("texture {} use uv layer {}".format(i, uv_layer))
                     geom.uvs[texture_id] = TexCoordArray()
                     geom.uvs[texture_id].array = uvs[uv_layer].array
                     geom.uvs[texture_id].index = texture_id
                 elif default_uv:
                     if DEBUG:
-                        osglog.log("texture {} use default uv layer {}".format(i, default_uv_key))
+                        Log("texture {} use default uv layer {}".format(i, default_uv_key))
                     geom.uvs[texture_id] = TexCoordArray()
                     geom.uvs[texture_id].index = texture_id
                     geom.uvs[texture_id].array = default_uv.array
@@ -947,7 +948,7 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
         # adjust uvs channels if no textures assigned
         if len(geom.uvs.keys()) == 0:
             if DEBUG:
-                osglog.log("no texture set, adjust uvs channels, in arbitrary order")
+                Log("no texture set, adjust uvs channels, in arbitrary order")
             for index, k in enumerate(uvs.keys()):
                 uvs[k].index = index
             geom.uvs = uvs
@@ -1106,7 +1107,7 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
 
         # if alpha not 1 then we set the blending mode on
         if DEBUG:
-            osglog.log("state material alpha {}".format(alpha))
+            Log("state material alpha {}".format(alpha))
         if alpha != 1.0:
             stateset.modes["GL_BLEND"] = "ON"
 
@@ -1208,7 +1209,7 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
         data["TextureSlots"] = {}
         texture_list = mat_source.texture_slots
         if DEBUG:
-            osglog.log("texture list {}".format(texture_list))
+            Log("texture list {}".format(texture_list))
 
         for i, texture_slot in enumerate(texture_list):
             if texture_slot is None:
@@ -1216,7 +1217,7 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
 
             texture = self.createTexture2D(texture_slot)
             if DEBUG:
-                osglog.log("texture {} {}".format(i, texture_slot))
+                Log("texture {} {}".format(i, texture_slot))
             if texture is None:
                 continue
 
@@ -1295,14 +1296,14 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
             faces = mesh.faces
 
         if (len(faces) == 0):
-            osglog.log("object {} has no faces, so no materials".format(self.object.name))
+            Log("object {} has no faces, so no materials".format(self.object.name))
             return None
         if len(mesh.materials) and mesh.materials[material_index] is not None:
             material_name = mesh.materials[material_index].name
             title = "mesh {} with material {}".format(self.object.name, material_name)
         else:
             title = "mesh {} without material".format(self.object.name)
-        osglog.log(title)
+        Log(title)
 
         vertexes = []
         collected_faces = []
@@ -1319,14 +1320,14 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
                 if DEBUG:
                     fdebug.append(vertex)
             if DEBUG:
-                osglog.log("true face {}".format(fdebug))
-                osglog.log("face {}".format(f))
+                Log("true face {}".format(fdebug))
+                Log("face {}".format(f))
             collected_faces.append((face, f))
 
         if (len(collected_faces) == 0):
-            osglog.log("object {} has no faces for sub material slot {}".format(self.object.name, material_index))
+            Log("object {} has no faces for sub material slot {}".format(self.object.name, material_index))
             end_title = '-' * len(title)
-            osglog.log(end_title)
+            Log(end_title)
             return None
 
         # colors = {}
@@ -1454,7 +1455,7 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
         for i in range(0, len(vertexes)):
             key = get_vertex_key(i)
             if DEBUG:
-                osglog.log("key {}".format(key))
+                Log("key {}".format(key))
             if key in vertex_dict.keys():
                 vertex_dict[key].append(i)
             else:
@@ -1467,7 +1468,7 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
             merged_vertexes[i] = index
             mapping_vertexes.append([i])
             if DEBUG:
-                osglog.log("process vertex {}".format(i))
+                Log("process vertex {}".format(i))
             vertex_indexes = vertex_dict[get_vertex_key(i)]
             for j in vertex_indexes:
                 if j <= i:
@@ -1475,19 +1476,19 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
                 if tagged_vertexes[j] is True:  # avoid processing more than one time a vertex
                     continue
                 if DEBUG:
-                    osglog.log("   vertex {} is the same".format(j))
+                    Log("   vertex {} is the same".format(j))
                 merged_vertexes[j] = index
                 tagged_vertexes[j] = True
                 mapping_vertexes[index].append(j)
 
         if DEBUG:
             for i in range(0, len(mapping_vertexes)):
-                osglog.log("vertex {} contains {}".format(i, mapping_vertexes[i]))
+                Log("vertex {} contains {}".format(i, mapping_vertexes[i]))
 
         if len(mapping_vertexes) != len(vertexes):
-            osglog.log("vertexes reduced from {} to {}".format(len(vertexes), len(mapping_vertexes)))
+            Log("vertexes reduced from {} to {}".format(len(vertexes), len(mapping_vertexes)))
         else:
-            osglog.log("vertexes {}".format(len(vertexes)))
+            Log("vertexes {}".format(len(vertexes)))
 
         faces = []
         for (original, face) in collected_faces:
@@ -1500,10 +1501,10 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
                     fdebug.append(vertexes[mapping_vertexes[merged_vertexes[v]][0]].index)
             faces.append(f)
             if DEBUG:
-                osglog.log("new face {}".format(f))
-                osglog.log("true face {}".format(fdebug))
+                Log("new face {}".format(f))
+                Log("true face {}".format(fdebug))
 
-        osglog.log("faces {}".format(len(faces)))
+        Log("faces {}".format(len(faces)))
 
         vgroups = {}
         original_vertexes2optimized = {}
@@ -1542,7 +1543,7 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
         #         blenObject = obj
 
         for vertex_group in self.object.vertex_groups:
-            # osglog.log("Look at vertex group: " + repr(vertex_group))
+            # Log("Look at vertex group: " + repr(vertex_group))
             verts = {}
             for idx, vertices in enumerate(mesh.vertices):
                 weight = 0
@@ -1556,8 +1557,8 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
                                 verts[v] = weight
 
             if len(verts) == 0:
-                osglog.log("Warning: [[blender]] The Group {} is skipped since it has no vertices"
-                           .format(vertex_group.name))
+                Log("Warning: [[blender]] The Group {} is skipped since it has no vertices"
+                    .format(vertex_group.name))
             else:
                 vertex_weight_list = [list(e) for e in verts.items()]
                 vg = VertexGroup()
@@ -1566,7 +1567,7 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
                 vgroups[vertex_group.name] = vg
 
         if (len(vgroups)):
-            osglog.log("vertex groups {}".format(len(vgroups)))
+            Log("vertex groups {}".format(len(vgroups)))
         geom.groups = vgroups
 
         osg_vertexes = VertexArray()
@@ -1593,7 +1594,7 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
                 osg_uvs[name].getArray().append(uvs[name][vindex])
 
         if (len(osg_uvs)):
-            osglog.log("uvs channels {} - {}".format(len(osg_uvs), osg_uvs.keys()))
+            Log("uvs channels {} - {}".format(len(osg_uvs), osg_uvs.keys()))
 
         nlin = 0
         ntri = 0
@@ -1608,7 +1609,7 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
             elif nv == 4:
                 nquad = nquad + 1
             else:
-                osglog.log("Warning: [[blender]] Faces with {} vertices are not supported".format(nv))
+                Log("Warning: [[blender]] Faces with {} vertices are not supported".format(nv))
 
         # counting number of primitives (one for lines, one for triangles and one for quads)
         numprims = 0
@@ -1674,7 +1675,7 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
             self.adjustUVLayerFromMaterial(geom, mesh.materials[material_index], uv_textures)
 
         end_title = '-' * len(title)
-        osglog.log(end_title)
+        Log(end_title)
         return geom
 
     def process(self, mesh):
@@ -1698,7 +1699,7 @@ use an uv layer '{}' that does not exist on the mesh '{}'; using the first uv ch
     def convert(self):
         # looks like this was dropped
         # if self.mesh.vertexUV:
-        #     osglog.log("Warning: [[blender]] mesh %s use sticky UV and it's not supported" % self.object.name)
+        #     Log("Warning: [[blender]] mesh %s use sticky UV and it's not supported" % self.object.name)
 
         return self.process(self.mesh)
 
@@ -1722,7 +1723,7 @@ class BlenderAnimationToAnimation(object):
 
     def needBake(self, blender_object):
         if self.has_constraints and self.config.bake_constraints:
-            osglog.log("Baking constraints " + str(self.object.constraints))
+            Log("Baking constraints " + str(self.object.constraints))
             return True
         else:
             if self.has_action:
@@ -1734,7 +1735,7 @@ class BlenderAnimationToAnimation(object):
         return False
 
     def createAnimation(self, target=None):
-        osglog.log("Exporting animation on object {}".format(self.object.name))
+        Log("Exporting animation on object {}".format(self.object.name))
         if self.has_action:
             self.action_name = self.object.animation_data.action.name
 
@@ -1759,7 +1760,7 @@ class BlenderAnimationToAnimation(object):
         if self.object.type == "ARMATURE":
             for bone in self.object.data.bones:
                 bname = bone.name
-                osglog.log("{} processing channels for bone {}".format(name, bname))
+                Log("{} processing channels for bone {}".format(name, bname))
                 self.appendChannelsToAnimation(bname, animation, action, prefix=('pose.bones["{}"].'.format(bname)))
             # Append channels for armature solid animation
             self.appendChannelsToAnimation(self.object.name, animation, action)
@@ -1780,13 +1781,13 @@ def getChannel(target, action, fps, data_path, array_indexes):
 
     for array_index in array_indexes:
         for fcurve in action.fcurves:
-            # osglog.log("fcurves {} {} matches {} {} ".format(fcurve.data_path,
+            # Log("fcurves {} {} matches {} {} ".format(fcurve.data_path,
             #                                                  fcurve.array_index,
             #                                                  data_path,
             #                                                  array_index))
             if fcurve.data_path == data_path and fcurve.array_index == array_index:
                 fcurves.append(fcurve)
-                # osglog.log("yes")
+                # Log("yes")
 
     if len(fcurves) == 0:
         return None
@@ -1813,7 +1814,7 @@ def getChannel(target, action, fps, data_path, array_indexes):
 
     for time in times:
         realtime = (time) / fps
-        osglog.log("time {} {} {}".format(time, realtime, fps))
+        Log("time {} {} {}".format(time, realtime, fps))
 
         # realtime = time
         if realtime > duration:
