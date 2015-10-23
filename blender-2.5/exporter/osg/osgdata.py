@@ -287,86 +287,60 @@ class Export(object):
         return blender_object.is_visible(self.config.scene) or not self.config.only_visible
 
     def exportChildrenRecursively(self, blender_object, parent, osg_root):
-        # We skip the object if it is in the excluded objects list
-        if self.isExcluded(blender_object):
-            return None
+        def parseArmature(blender_armature):
+            osg_object = self.createSkeleton(blender_object)
+            anims = createAnimationsGenericObject(osg_object, blender_object, self.config,
+                                           createAnimationUpdate(blender_object,
+                                                                 UpdateMatrixTransform(name=osg_object.name),
+                                                                 blender_object.rotation_mode),
+                                           self.unique_objects)
+            return (osg_object, anims)
 
-        # Check if the object is visible. The visibility will be used for meshes and lights
-        # to determine if we keep it or not. Other objects have to be taken into account even if they
-        # are not visible as they can be used as modifiers (avoiding some crashs during the export)
-        is_visible = self.isObjectVisible(blender_object)
-        osglog.log("")
+        def parseLight(blender_light):
+            matrix = getDeltaMatrixFrom(blender_object.parent, blender_object)
+            osg_object = MatrixTransform()
+            osg_object.setName(blender_object.name)
+            osg_object.matrix = matrix
+            lightItem = self.createLight(blender_object)
+            anims = createAnimationsGenericObject(osg_object, blender_object, self.config,
+                                           createAnimationUpdate(blender_object,
+                                                                 UpdateMatrixTransform(name=osg_object.name),
+                                                                 blender_object.rotation_mode),
+                                           self.unique_objects)
+            osg_object.children.append(lightItem)
+            return (osg_object, anims)
 
-        anims = []
-        osg_object = None
-        if self.unique_objects.hasObject(blender_object):
-            osglog.log("use referenced osg object for {} {}".format(blender_object.name, blender_object.type))
-            osg_object = self.unique_objects.getObject(blender_object)
-        else:
-            osglog.log("Type of {} is {}".format(blender_object.name, blender_object.type))
-            if blender_object.type == "ARMATURE":
-                osg_object = self.createSkeleton(blender_object)
-                anims = createAnimationsGenericObject(osg_object, blender_object, self.config,
-                                               createAnimationUpdate(blender_object,
-                                                                     UpdateMatrixTransform(name=osg_object.name),
-                                                                     blender_object.rotation_mode),
-                                               self.unique_objects)
+        # Mesh, Camera and Empty objects
+        def parseBlenderObject(blender_object, is_visible):
+            # because it blender can insert inverse matrix, we have to recompute the parent child
+            # matrix for our use. Not if an armature we force it to be in rest position to compute
+            # matrix in the good space
+            matrix = getDeltaMatrixFrom(blender_object.parent, blender_object)
+            osg_object = MatrixTransform()
+            osg_object.setName(blender_object.name)
 
-            elif blender_object.type in ['MESH', 'EMPTY', 'CAMERA']:
-                # because it blender can insert inverse matrix, we have to recompute the parent child
-                # matrix for our use. Not if an armature we force it to be in rest position to compute
-                # matrix in the good space
-                matrix = getDeltaMatrixFrom(blender_object.parent, blender_object)
-                osg_object = MatrixTransform()
-                osg_object.setName(blender_object.name)
+            osg_object.matrix = matrix.copy()
+            if self.config.zero_translations and parent is None:
+                if bpy.app.version[0] >= 2 and bpy.app.version[1] >= 62:
+                    print("zero_translations option has not been converted to blender 2.62")
+                else:
+                    osg_object.matrix[3].xyz = Vector()
 
-                osg_object.matrix = matrix.copy()
-                if self.config.zero_translations and parent is None:
-                    if bpy.app.version[0] >= 2 and bpy.app.version[1] >= 62:
-                        print("zero_translations option has not been converted to blender 2.62")
-                    else:
-                        osg_object.matrix[3].xyz = Vector()
+            anims = createAnimationsGenericObject(osg_object, blender_object, self.config,
+                                           createAnimationUpdate(blender_object,
+                                                                 UpdateMatrixTransform(name=osg_object.name),
+                                                                 blender_object.rotation_mode),
+                                           self.unique_objects)
 
-                anims = createAnimationsGenericObject(osg_object, blender_object, self.config,
-                                               createAnimationUpdate(blender_object,
-                                                                     UpdateMatrixTransform(name=osg_object.name),
-                                                                     blender_object.rotation_mode),
-                                               self.unique_objects)
+            if is_visible:
+                if blender_object.type == "MESH":
+                    osg_geode = self.createGeodeFromObject(blender_object)
+                    osg_object.children.append(osg_geode)
+                else:
+                    self.evaluateGroup(blender_object, osg_object, osg_root)
+            return (osg_object, anims)
 
-                if is_visible:
-                    if blender_object.type == "MESH":
-                        osg_geode = self.createGeodeFromObject(blender_object)
-                        osg_object.children.append(osg_geode)
-                    else:
-                        self.evaluateGroup(blender_object, osg_object, osg_root)
-
-            elif blender_object.type == "LAMP" and is_visible:
-                matrix = getDeltaMatrixFrom(blender_object.parent, blender_object)
-                osg_object = MatrixTransform()
-                osg_object.setName(blender_object.name)
-                osg_object.matrix = matrix
-                lightItem = self.createLight(blender_object)
-                anims = createAnimationsGenericObject(osg_object, blender_object, self.config,
-                                               createAnimationUpdate(blender_object,
-                                                                     UpdateMatrixTransform(name=osg_object.name),
-                                                                     blender_object.rotation_mode),
-                                               self.unique_objects)
-                osg_object.children.append(lightItem)
-
-            else:
-                osglog.log("Warning: [[blender]] The object {} (type {}) was not exported"
-                           .format(blender_object.name, blender_object.type))
-                return None
-
-            self.unique_objects.registerObject(blender_object, osg_object)
-
-        if anims is not None:
-            self.animations += [a for a in anims if a is not None]
-
-        if osg_root is None:
-            osg_root = osg_object
-
-        if blender_object.parent_type == "BONE":
+        def handleBoneChild(blender_object, osg_object):
             bone = findBoneInHierarchy(osg_root, blender_object.parent_bone)
             if bone is None:
                 osglog.log("Warning: [[blender]] {} not found".format(blender_object.parent_bone))
@@ -384,6 +358,46 @@ class Export(object):
 
                 armature.pose_position = original_pose_position
 
+        # We skip the object if it is in the excluded objects list
+        if self.isExcluded(blender_object):
+            return None
+
+        # Check if the object is visible. The visibility will be used for meshes and lights
+        # to determine if we keep it or not. Other objects have to be taken into account even if they
+        # are not visible as they can be used as modifiers (avoiding some crashs during the export)
+        is_visible = self.isObjectVisible(blender_object)
+        osglog.log("")
+
+        anims = []
+        osg_object = None
+        if self.unique_objects.hasObject(blender_object):
+            osglog.log("use referenced osg object for {} {}".format(blender_object.name, blender_object.type))
+            osg_object = self.unique_objects.getObject(blender_object)
+        else:
+            osglog.log("Type of {} is {}".format(blender_object.name, blender_object.type))
+
+            if blender_object.type == "ARMATURE":
+                osg_object, anims = parseArmature(blender_object)
+            elif blender_object.type == "LAMP" and is_visible:
+                osg_object, anims = parseLight(blender_object)
+            elif blender_object.type in ['MESH', 'EMPTY', 'CAMERA']:
+                osg_object, anims = parseBlenderObject(blender_object, is_visible)
+            else:
+                osglog.log("Warning: [[blender]] The object {} (type {}) was not exported"
+                           .format(blender_object.name, blender_object.type))
+                return None
+
+            self.unique_objects.registerObject(blender_object, osg_object)
+
+        if anims is not None:
+            self.animations += [a for a in anims if a is not None]
+
+        if osg_root is None:
+            osg_root = osg_object
+
+        # Handle parenting
+        if blender_object.parent_type == "BONE":
+            handleBoneChild(blender_object, osg_object)
         elif parent:
             parent.children.append(osg_object)
 
