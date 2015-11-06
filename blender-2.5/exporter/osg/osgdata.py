@@ -134,46 +134,6 @@ def createAnimationUpdate(obj, callback, rotation_mode, prefix="", zero=False):
     return callback
 
 
-def createAnimationsObject(osg_object, blender_object, config, update_callback,
-                           unique_objects, parse_all_actions=False):
-    if config.export_anim is False or blender_object.animation_data is None:
-        return None
-
-    if update_callback is None:
-        return None
-
-    if unique_objects.hasAnimation(blender_object.animation_data.action):
-        return None
-
-    has_action = hasAction(blender_object)
-    has_constraints = hasConstraints(blender_object)
-    anims = []
-
-    if not has_action:
-        return None
-
-    action2animation = BlenderAnimationToAnimation(object=blender_object,
-                                                   config=config,
-                                                   unique_objects=unique_objects,
-                                                   has_action=has_action,
-                                                   has_constraints=has_constraints)
-    if parse_all_actions:
-        action_backup = blender_object.animation_data.action
-        for action in bpy.data.actions:
-            blender_object.animation_data.action = action
-            anims.append(action2animation.createAnimation(blender_object.name))
-        # Restore original action
-        blender_object.animation_data.action = action_backup
-    else:
-        anims.append(action2animation.createAnimation(blender_object.name))
-
-    if len(anims) > 0:
-        if blender_object.type == 'ARMATURE':
-            osg_object.update_callbacks = []
-        osg_object.update_callbacks.append(update_callback)
-    return anims
-
-
 def createAnimationMaterialAndSetCallback(osg_node, obj, config, unique_objects):
     Log("Warning: [[blender]] Update material animations are not yet supported")
     return None
@@ -187,16 +147,21 @@ class UniqueObject(object):
         self.objects = {}
         self.anims = {}
 
-    def hasAnimation(self, obj):
-        return obj in self.anims
+    def hasAnimation(self, action):
+        return any([action in self.anims[key] for key in self.anims])
 
-    def getAnimation(self, obj):
-        if self.hasAnimation(obj):
-            return self.anims[obj]
+    def getAnimation(self, action):
+        for anim in self.anims:
+            if action in self.anims[anim]:
+                return action
+
         return None
 
-    def registerAnimation(self, obj, reg):
-        self.anims[obj] = reg
+    def registerAnimation(self, animation, action):
+        if animation not in self.anims:
+            self.anims[animation] = []
+
+        self.anims[animation].append(action)
 
     def hasObject(self, obj):
         return obj in self.objects
@@ -242,6 +207,7 @@ class Export(object):
             self.config.defaultattr('scene', bpy.context.scene)
         self.rest_armatures = []
         self.animations = []
+        self.current_animation = None
         self.images = set()
         self.lights = {}
         self.root = None
@@ -297,10 +263,52 @@ class Export(object):
     def isObjectVisible(self, obj):
         return obj.is_visible(self.config.scene) or not self.config.only_visible
 
+    def createAnimationsObject(self, osg_object, blender_object, config, update_callback,
+                               unique_objects, parse_all_actions=False):
+        if config.export_anim is False or blender_object.animation_data is None:
+            return None
+
+        if update_callback is None:
+            return None
+
+        if unique_objects.hasAnimation(blender_object.animation_data.action):
+            return None
+
+        has_action = hasAction(blender_object)
+        has_constraints = hasConstraints(blender_object)
+        anims = []
+
+        if not has_action:
+            return None
+
+        # one action
+        action2animation = BlenderAnimationToAnimation(object=blender_object,
+                                                       config=config,
+                                                       unique_objects=unique_objects,
+                                                       has_action=has_action,
+                                                       has_constraints=has_constraints)
+        if parse_all_actions:
+            anims = action2animation.parseAllActions()
+        else:
+            # must have only one animation here
+            if not self.current_animation:
+                self.current_animation = Animation()
+                self.current_animation.setName('Take 01')
+
+            action2animation.handleAnimationBaking()
+            action2animation.addActionDataToAnimation(self.current_animation)
+            anims.append(self.current_animation)
+
+        if len(anims) > 0:
+            if blender_object.type == 'ARMATURE':
+                osg_object.update_callbacks = []
+            osg_object.update_callbacks.append(update_callback)
+        return anims
+
     def exportChildrenRecursively(self, blender_object, parent, osg_root):
         def parseArmature(blender_armature):
             osg_object = self.createSkeleton(blender_object)
-            anims = createAnimationsObject(osg_object, blender_object, self.config,
+            anims = self.createAnimationsObject(osg_object, blender_object, self.config,
                                            createAnimationUpdate(blender_object,
                                                                  UpdateMatrixTransform(name=osg_object.name),
                                                                  rotation_mode),
@@ -314,7 +322,7 @@ class Export(object):
             osg_object.setName(blender_object.name)
             osg_object.matrix = matrix
             lightItem = self.createLight(blender_object)
-            anims = createAnimationsObject(osg_object, blender_object, self.config,
+            anims = self.createAnimationsObject(osg_object, blender_object, self.config,
                                            createAnimationUpdate(blender_object,
                                                                  UpdateMatrixTransform(name=osg_object.name),
                                                                  rotation_mode),
@@ -339,7 +347,7 @@ class Export(object):
                 else:
                     osg_object.matrix[3].xyz = Vector()
 
-            anims = createAnimationsObject(osg_object, blender_object, self.config,
+            anims = self.createAnimationsObject(osg_object, blender_object, self.config,
                                            createAnimationUpdate(blender_object,
                                                                  UpdateMatrixTransform(name=osg_object.name),
                                                                  rotation_mode),
@@ -407,7 +415,7 @@ class Export(object):
             self.unique_objects.registerObject(blender_object, osg_object)
 
         if anims is not None:
-            self.animations += [a for a in anims if a is not None]
+            self.animations.extend(anims)
 
         if osg_root is None:
             osg_root = osg_object
@@ -1740,11 +1748,38 @@ class BlenderAnimationToAnimation(object):
         self.config = kwargs["config"]
         self.object = kwargs.get("object", None)
         self.unique_objects = kwargs.get("unique_objects", UniqueObject())
-        self.animations = None
         self.action = None
         self.action_name = None
         self.has_action = kwargs.get("has_action", False)
         self.has_constraints = kwargs.get("has_constraints", False)
+        if self.object:
+            self.target = self.object.name
+        else:
+            self.target = 'target'
+
+        if self.has_action:
+            self.action_name = self.object.animation_data.action.name
+
+    def parseAllActions(self):
+        anims = []
+        action_backup = self.object.animation_data.action
+        for action in bpy.data.actions:
+            self.object.animation_data.action = action
+            self.action = action
+            anims.append(action2animation.createAnimation(self.object.name))
+        # Restore original action
+        self.object.animation_data.action = action_backup
+        return anims
+
+    def handleAnimationBaking(self):
+        Log("Exporting animation on object {}".format(self.object.name))
+        if self.config.bake_animations or self.needBake(self.object):
+            print('BAKING animation for action')
+            self.action = osgbake.bakeAnimation(self.config.scene, self.object,
+                                                use_quaternions=self.config.use_quaternions,
+                                                has_action=self.has_action)
+
+            self.action_name = self.object.animation_data.action.name if self.has_action else 'Action_baked'
 
     def needBake(self, blender_object):
         if self.has_constraints and self.config.bake_constraints:
@@ -1775,8 +1810,22 @@ class BlenderAnimationToAnimation(object):
             target = self.object.name
 
         anim = self.createAnimationFromAction(target, self.action_name, self.action)
-        self.unique_objects.registerAnimation(self.action, anim)
+        self.unique_objects.registerAnimation(anim, self.action)
         return anim
+
+    def addActionDataToAnimation(self, animation):
+        print('adding data from action {} to animation {}'.format(self.action, animation))
+        if self.object.type == "ARMATURE":
+            for bone in self.object.data.bones:
+                bname = bone.name
+                Log("{} processing channels for bone {}".format(name, bname))
+                self.appendChannelsToAnimation(bname, animation, self.action, prefix=('pose.bones["{}"].'.format(bname)))
+            # Append channels for armature solid animation
+            self.appendChannelsToAnimation(self.object.name, animation, self.action)
+        else:
+            self.appendChannelsToAnimation(self.target, animation, self.action)
+        print(len(animation.getChannels()))
+        return animation
 
     def createAnimationFromAction(self, target, name, action):
         animation = Animation()
