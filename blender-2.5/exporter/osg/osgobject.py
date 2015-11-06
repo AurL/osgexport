@@ -1260,6 +1260,9 @@ class Animation(Object):
     def className(self):
         return "Animation"
 
+    def getChannels(self):
+        return self.channels
+
     def nameSpace(self):
         return "osgAnimation"
 
