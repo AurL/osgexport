@@ -298,7 +298,7 @@ class Export(object):
             anims = self.createAnimationsObject(osg_object, blender_object, self.config,
                                                 createAnimationUpdate(blender_object,
                                                                       UpdateMatrixTransform(name=osg_object.name),
-                                                                      blender_object.rotation_mode),
+                                                                      rotation_mode),
                                                 self.unique_objects)
             return (osg_object, anims)
 
@@ -311,7 +311,7 @@ class Export(object):
             anims = self.createAnimationsObject(osg_object, blender_object, self.config,
                                                 createAnimationUpdate(blender_object,
                                                                       UpdateMatrixTransform(name=osg_object.name),
-                                                                      blender_object.rotation_mode),
+                                                                      rotation_mode),
                                                 self.unique_objects)
             osg_object.children.append(lightItem)
             return (osg_object, anims)
@@ -335,7 +335,7 @@ class Export(object):
             anims = self.createAnimationsObject(osg_object, blender_object, self.config,
                                                 createAnimationUpdate(blender_object,
                                                                       UpdateMatrixTransform(name=osg_object.name),
-                                                                      blender_object.rotation_mode),
+                                                                      rotation_mode),
                                                 self.unique_objects)
 
             if is_visible:
@@ -376,6 +376,8 @@ class Export(object):
 
         anims = []
         osg_object = None
+        rotation_mode = 'QUATERNION' if self.config.use_quaternions else blender_object.rotation_mode
+
         if self.unique_objects.hasObject(blender_object):
             Log("use referenced osg object for {} {}".format(blender_object.name, blender_object.type))
             osg_object = self.unique_objects.getObject(blender_object)
@@ -1758,7 +1760,7 @@ class BlenderAnimationToAnimation(object):
 
         anim = self.createAnimationFromAction(target, self.action_name, self.action)
         self.unique_objects.registerAnimation(anim, self.action)
-        return anim
+        return [anim]
 
     def createAnimationFromAction(self, target, name, action):
         animation = Animation()
