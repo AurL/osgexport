@@ -204,12 +204,23 @@ class Export(object):
             self.config.defaultattr('scene', bpy.context.scene)
         self.rest_armatures = []
         self.animations = []
+        self.baked_actions = []
         self.current_animation = None
         self.images = set()
         self.lights = {}
         self.root = None
         self.unique_objects = UniqueObject()
         self.parse_all_actions = False  # if only one object and several actions
+
+    def clean_generated_actions(self):
+        for action in self.baked_actions:
+            if action.users != 0:
+                Log('Warning: The exporter generated actions that are still attached to objects. Cleaning users')
+                action.user_clear()
+            try:
+                bpy.data.actions.remove(action)
+            except:
+                Log('Can''t remove generated action')
 
     def isExcluded(self, blender_object):
         return blender_object.name in self.config.exclude_objects
@@ -297,6 +308,8 @@ class Export(object):
             action2animation.handleAnimationBaking()
             action2animation.addActionDataToAnimation(self.current_animation)
 
+        # Remove actions created by the exporter for baking
+        self.baked_actions.extend(action2animation.get_generated_actions())
         if update_callback:
             if blender_object.type == 'ARMATURE':
                 osg_object.update_callbacks = []
@@ -534,6 +547,7 @@ class Export(object):
                     self.exportItemAndChildren(obj)
         finally:
             self.restoreArmaturePoseMode()
+            self.clean_generated_actions()
 
         self.postProcess()
 
@@ -1740,7 +1754,8 @@ class BlenderAnimationToAnimation(object):
         self.object = kwargs.get("object", None)
         self.unique_objects = kwargs.get("unique_objects", UniqueObject())
         self.animations = None
-        self.action = None
+        self.current_action = None
+        self.baked_actions = []
         self.action_name = None
         self.has_action = kwargs.get("has_action", False)
         self.has_constraints = kwargs.get("has_constraints", False)
@@ -1758,8 +1773,8 @@ class BlenderAnimationToAnimation(object):
             return True
         else:
             if self.has_action:
-                self.action = self.object.animation_data.action
-                for fcu in self.action.fcurves:
+                self.current_action = self.object.animation_data.action
+                for fcu in self.current_action.fcurves:
                     for kf in fcu.keyframe_points:
                         if kf.interpolation != 'LINEAR':
                             return True
@@ -1769,20 +1784,22 @@ class BlenderAnimationToAnimation(object):
         Log("Exporting animation on object {}".format(self.object.name))
         if self.config.bake_animations or self.needBake(self.object):
             print('BAKING animation for action')
-            self.action = osgbake.bakeAnimation(self.config.scene, self.object,
-                                                use_quaternions=self.config.use_quaternions,
-                                                has_action=self.has_action)
+            self.current_action = osgbake.bakeAnimation(self.config.scene, self.config.bake_frame_step,
+                                                        self.object,
+                                                        use_quaternions=self.config.use_quaternions,
+                                                        has_action=self.has_action)
+
         self.action_name = self.object.animation_data.action.name if self.has_action else 'Action_baked'
 
     def parseAllActions(self):
         anims = []
         action_backup = self.object.animation_data.action
-        nb_actions = len(bpy.data.actions)
         actions_dict = dict(bpy.data.actions)
         for action_key in actions_dict:
             action = bpy.data.actions[action_key]
             self.object.animation_data.action = action
-            self.action = action
+            self.action_name = action.name
+            self.current_action = action
             anims.append(self.createAnimation())
         # Restore original action
         self.object.animation_data.action = action_backup
@@ -1795,14 +1812,15 @@ class BlenderAnimationToAnimation(object):
 
         # Bake animation if needed
         if self.config.bake_animations or self.needBake(self.object):
-            self.action = osgbake.bakeAnimation(self.config.scene, self.config.bake_frame_step,
-                                                self.object,
-                                                has_action=self.has_action,
-                                                use_quaternions=self.config.use_quaternions)
+            self.current_action = osgbake.bakeAnimation(self.config.scene, self.config.bake_frame_step,
+                                                        self.object,
+                                                        has_action=self.has_action,
+                                                        use_quaternions=self.config.use_quaternions)
+            self.baked_actions.append(self.current_action)
             self.action_name = self.object.animation_data.action.name if self.has_action else 'Action_baked'
 
-        anim = self.createAnimationFromAction(self.action)
-        self.unique_objects.registerAnimation(anim, self.action)
+        anim = self.createAnimationFromAction(self.current_action)
+        self.unique_objects.registerAnimation(anim, self.current_action)
         return anim
 
     def addActionDataToAnimation(self, animation):
@@ -1811,11 +1829,11 @@ class BlenderAnimationToAnimation(object):
             for bone in self.object.data.bones:
                 bname = bone.name
                 Log("{} processing channels for bone {}".format(self.action_name, bname))
-                self.appendChannelsToAnimation(bname, animation, self.action, prefix=('pose.bones["{}"].'.format(bname)))
+                self.appendChannelsToAnimation(bname, animation, self.current_action, prefix=('pose.bones["{}"].'.format(bname)))
             # Append channels for armature solid animation
-            self.appendChannelsToAnimation(self.object.name, animation, self.action)
+            self.appendChannelsToAnimation(self.object.name, animation, self.current_action)
         else:
-            self.appendChannelsToAnimation(self.target, animation, self.action)
+            self.appendChannelsToAnimation(self.target, animation, self.current_action)
 
         return animation
 
@@ -1837,7 +1855,8 @@ class BlenderAnimationToAnimation(object):
         channels = exportActionsToKeyframeSplitRotationTranslationScale(target, action, self.config.anim_fps, prefix)
         for channel in channels:
             anim.channels.append(channel)
-
+    def get_generated_actions(self):
+        return self.baked_actions
 
 def getChannel(target, action, fps, data_path, array_indexes):
     times = []
