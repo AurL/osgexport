@@ -377,17 +377,19 @@ class Export(object):
             if bone is None:
                 Log("Warning: [[blender]] {} not found".format(blender_object.parent_bone))
             else:
-                armature = blender_object.parent.data
-                original_pose_position = armature.pose_position
-                armature.pose_position = 'REST'
+                armature = blender_object.parent
+                original_pose_position = armature.data.pose_position
+                armature.data.pose_position = 'REST'
 
-                boneInWorldSpace = blender_object.parent.matrix_world \
-                    * armature.bones[blender_object.parent_bone].matrix_local
+                boneInWorldSpace = armature.matrix_world \
+                    * armature.pose.bones[blender_object.parent_bone].matrix
 
                 matrix = getDeltaMatrixFromMatrix(boneInWorldSpace, blender_object.matrix_world)
+
                 osg_object.matrix = matrix
                 bone.children.append(osg_object)
-                armature.pose_position = original_pose_position
+
+                armature.data.pose_position = original_pose_position
 
         # We skip the object if it is in the excluded objects list
         if self.isExcluded(blender_object):
@@ -1780,15 +1782,29 @@ class BlenderAnimationToAnimation(object):
                             return True
         return False
 
-    def handleAnimationBaking(self):
+    def handleAnimationBaking(self, is_multi_animation=False):
         Log("Exporting animation on object {}".format(self.object.name))
         if self.config.bake_animations or self.needBake(self.object):
-            print('BAKING animation for action')
-            self.current_action = osgbake.bakeAnimation(self.config.scene, self.config.bake_frame_step,
+            # all scene actions will be baked and merged together into a single
+            # osg animation, so define start and end frames with the wider duration
+            start = self.config.scene.frame_start
+            end = self.config.scene.frame_end
+
+            if is_multi_animation:
+                # Bake animation using current action frame_range
+                start, end = self.object.animation_data.action.frame_range
+            else:
+                # Bake using widest time range to have short animations looping
+                start, end = getWidestActionDuration(self.config.scene)
+
+            self.current_action = osgbake.bakeAnimation(self.config.scene,
+                                                        self.config.bake_frame_step,
                                                         self.object,
+                                                        start=start,
+                                                        end=end,
                                                         use_quaternions=self.config.use_quaternions,
                                                         has_action=self.has_action)
-
+            self.baked_actions.append(self.current_action)
         self.action_name = self.object.animation_data.action.name if self.has_action else 'Action_baked'
 
     def parseAllActions(self):
@@ -1798,30 +1814,13 @@ class BlenderAnimationToAnimation(object):
         for action_key in actions_dict:
             action = bpy.data.actions[action_key]
             self.object.animation_data.action = action
-            self.action_name = action.name
-            self.current_action = action
-            anims.append(self.createAnimation())
+            self.handleAnimationBaking(is_multi_animation=True)
+            anim = self.createAnimationFromAction(self.current_action)
+            self.unique_objects.registerAnimation(anim, self.current_action)
+            anims.append(anim)
         # Restore original action
         self.object.animation_data.action = action_backup
         return anims
-
-    def createAnimation(self):
-        Log("Exporting animation on object {}".format(self.object.name))
-        if self.has_action:
-            self.action_name = self.object.animation_data.action.name
-
-        # Bake animation if needed
-        if self.config.bake_animations or self.needBake(self.object):
-            self.current_action = osgbake.bakeAnimation(self.config.scene, self.config.bake_frame_step,
-                                                        self.object,
-                                                        has_action=self.has_action,
-                                                        use_quaternions=self.config.use_quaternions)
-            self.baked_actions.append(self.current_action)
-            self.action_name = self.object.animation_data.action.name if self.has_action else 'Action_baked'
-
-        anim = self.createAnimationFromAction(self.current_action)
-        self.unique_objects.registerAnimation(anim, self.current_action)
-        return anim
 
     def addActionDataToAnimation(self, animation):
         print('adding data from action {} to animation {}'.format(self.action_name, animation))
