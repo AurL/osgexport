@@ -77,6 +77,7 @@ def bakeAction(frame_start,
             if do_visual_keying:
                 # Get the final transform of the bone in its own local space...
                 matrix[name] = obj.convert_space(pbone, pbone.matrix, 'POSE', 'LOCAL')
+
             else:
                 matrix[name] = pbone.matrix_basis.copy()
         return matrix
@@ -249,6 +250,18 @@ def bakeAction(frame_start,
 
     return action
 
+def setRotationInheritance(blender_object):
+    if not blender_object.type == 'ARMATURE':
+        return []
+
+    backup = []
+    for bone in blender_object.data.bones:
+        if not bone.use_inherit_rotation:
+            backup.append(bone)
+            bone.use_inherit_rotation = True
+
+    return backup
+
 
 def bakeAnimation(scene, blender_object, has_action=False, use_quaternions=False):
     # baking will replace the current action but we want to keep scene unchanged
@@ -258,6 +271,10 @@ def bakeAnimation(scene, blender_object, has_action=False, use_quaternions=False
     # Set armature to POSE mode before baking
     if blender_object.type == 'ARMATURE':
         blender_object.data.pose_position = 'POSE'
+        # As osg bones inherit parent's transforms by default, here the property
+        # "use_inherit_rotation" has to be enabled to get the good baking results
+        # to avoid bones transform issues
+        backup_bones = setRotationInheritance(blender_object)
 
     do_visual_keying = True # Always, need to take bone constraints  into account
 
@@ -282,6 +299,9 @@ def bakeAnimation(scene, blender_object, has_action=False, use_quaternions=False
 
     if blender_object.type == 'ARMATURE':
         blender_object.data.pose_position = 'REST'
+        for bone in backup_bones:
+            bone.use_inherit_rotation = False
+
     scene.objects.active = active_object_backup
 
     return baked_action
