@@ -1790,7 +1790,17 @@ class BlenderAnimationToAnimation(object):
         Log("Exporting animation on object {}".format(self.object.name))
         if self.config.bake_animations or self.needBake(self.object):
             print('BAKING animation for action')
+            start = self.config.scene.frame_start
+            end = self.config.scene.frame_end
+            if self.has_action:
+                start, end = self.object.animation_data.action.frame_range
+
+            if self.has_constraints:
+                start, end = getWiderActionDuration(self.config.scene)
+
             self.current_action = osgbake.bakeAnimation(self.config.scene, self.object,
+                                                start=start,
+                                                end=end,
                                                 use_quaternions=self.config.use_quaternions,
                                                 has_action=self.has_action)
 
@@ -1812,12 +1822,18 @@ class BlenderAnimationToAnimation(object):
 
     def createAnimation(self):
         Log("Exporting animation on object {}".format(self.object.name))
+        start = self.config.scene.frame_start
+        end = self.config.scene.frame_end
         if self.has_action:
             self.action_name = self.object.animation_data.action.name
+            start, end = self.object.animation_data.action.frame_range
 
         # Bake animation if needed
         if self.config.bake_animations or self.needBake(self.object):
+
             self.current_action = osgbake.bakeAnimation(self.config.scene, self.object,
+                                                start=int(start),
+                                                end=int(end),
                                                 has_action=self.has_action,
                                                 use_quaternions=self.config.use_quaternions)
             self.baked_actions.append(self.current_action)

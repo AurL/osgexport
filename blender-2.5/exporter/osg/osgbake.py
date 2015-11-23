@@ -263,8 +263,9 @@ def setRotationInheritance(blender_object):
     return backup
 
 
-def bakeAnimation(scene, blender_object, has_action=False, use_quaternions=False):
+def bakeAnimation(scene, blender_object, start=0, end=100, has_action=False, use_quaternions=False):
     # baking will replace the current action but we want to keep scene unchanged
+
     if has_action:
         original_action = blender_object.animation_data.action
 
@@ -281,8 +282,8 @@ def bakeAnimation(scene, blender_object, has_action=False, use_quaternions=False
     # Baking is done on the active object
     active_object_backup = scene.objects.active
     scene.objects.active = blender_object
-    baked_action = bakeAction(scene.frame_start,
-                              scene.frame_end,
+    baked_action = bakeAction(int(start),
+                              int(end),
                               scene.frame_step,
                               do_clean=True,  # clean keyframes
                               do_constraint_clear=False,
