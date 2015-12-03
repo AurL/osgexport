@@ -1813,6 +1813,10 @@ class BlenderAnimationToAnimation(object):
         actions_dict = dict(bpy.data.actions)
         for action_key in actions_dict:
             action = bpy.data.actions[action_key]
+            # discard morph actions
+            if isSolidOrRigAction(action):
+                continue
+
             self.object.animation_data.action = action
             self.handleAnimationBaking(is_multi_animation=True)
             anim = self.createAnimationFromAction(self.current_action)

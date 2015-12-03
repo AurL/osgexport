@@ -135,6 +135,13 @@ def hasNLATracks(blender_object):
            hasattr(blender_object.animation_data, "nla_tracks") and \
            blender_object.animation_data.nla_tracks
 
+def isSolidOrRigAction(action):
+    for curve in action.fcurves:
+        if 'key_block' in curve.data_path:
+            return True
+
+    return False
+
 
 
 # OBJECTS HELPERS
