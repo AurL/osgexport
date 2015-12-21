@@ -275,7 +275,10 @@ class Export(object):
         if not has_action and not has_constraints and not has_morph and not hasNLATracks(blender_object):
             return None
 
-        if parse_all_actions and not has_action and not has_morph:
+        if parse_all_actions and not has_action and not has_morph and not hasNLATracks(blender_object):
+            return None
+
+        if has_constraints and (blender_object.parent and blender_object.parent.type == 'ARMATURE'):
             return None
 
         action2animation = BlenderAnimationToAnimation(object=blender_object,
@@ -1638,7 +1641,7 @@ class BlenderAnimationToAnimation(object):
                 anim_object.animation_data_clear()
 
         anims = []
-        if not self.has_action and not self.has_morph:
+        if not self.has_action and not self.has_morph and not hasNLATracks(self.object):
             Log("Warning: osgdata::parseAllActions object has no action")
             return anims
         actions_dict = dict(bpy.data.actions)
