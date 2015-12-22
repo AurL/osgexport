@@ -222,10 +222,13 @@ class Export(object):
                 if arm.data.pose_position == 'POSE':
                     arm.data.pose_position = 'REST'
                     self.rest_armatures.append(arm)
+        # Update changes
+        self.config.scene.update()
 
     def restoreArmaturePoseMode(self):
         for arm in self.rest_armatures:
             arm.data.pose_position = 'POSE'
+        self.config.scene.update()
 
     def exportItemAndChildren(self, blender_object):
         item = self.exportChildrenRecursively(blender_object, None, None)
@@ -735,9 +738,11 @@ class Export(object):
         if armature_modifier is not None or mesh.parent and mesh.parent.type == 'ARMATURE':
             exportInfluence = True
 
-        if self.config.apply_modifiers and has_non_armature_modifiers:
-            # Breaks morph targets if we apply modifiers here
+        # converting to mesh skips shape keys
+        if self.config.apply_modifiers and has_non_armature_modifiers and not hasShapeKeys(mesh):
             mesh_object = mesh.to_mesh(self.config.scene, (not hasShapeKeys(mesh)), 'PREVIEW')
+
+            # armature_modifier.object= backup_object
         else:
             mesh_object = mesh.data
 
