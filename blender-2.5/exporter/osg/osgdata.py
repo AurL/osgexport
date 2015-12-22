@@ -735,13 +735,15 @@ class Export(object):
             else:
                 has_non_armature_modifiers = True
 
-        if armature_modifier is not None or mesh.parent and mesh.parent.type == 'ARMATURE':
+        # Consider a mesh child of armature as rigged only if it has no parent_bone. To get both bone parenting
+        # and riggin effect, an armature modifier has to be applied
+        if armature_modifier is not None or mesh.parent and mesh.parent.type == 'ARMATURE' and not mesh.parent_bone:
             exportInfluence = True
 
         # converting to mesh skips shape keys
         if self.config.apply_modifiers and has_non_armature_modifiers and not hasShapeKeys(mesh):
-            mesh_object = mesh.to_mesh(self.config.scene, (not hasShapeKeys(mesh)), 'PREVIEW')
-
+            # Ensure that Armature (if any) is in REST mode
+            mesh_object = mesh.to_mesh(self.config.scene, True, 'PREVIEW')
             # armature_modifier.object= backup_object
         else:
             mesh_object = mesh.data
