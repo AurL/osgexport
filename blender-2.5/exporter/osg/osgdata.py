@@ -1617,17 +1617,16 @@ class BlenderAnimationToAnimation(object):
         self.action_name = self.object.animation_data.action.name if self.has_action else 'Action_baked'
 
     def parseAllActions(self):
+        # Generates one animation per compatible action
+
         def parseSolidRigAction():
             if hasAction(self.object):
-                backup_action = self.object.animation_data.action
                 # The object is animated so we always have animation_data not None here
                 self.object.animation_data.action = action
                 self.handleAnimationBaking(is_multi_animation=True)
                 self.addActionDataToAnimation(anim, morph=False)
                 self.object.animation_data.action = backup_action
                 anims.append(anim)
-                if backup_action:
-                    self.object.animation_data.action = backup_action
 
         def parseMorphAction():
             anim_object = self.object if isObjectMorphAction(action) else self.object.data.shape_keys
@@ -1651,20 +1650,24 @@ class BlenderAnimationToAnimation(object):
         if not self.has_action and not self.has_morph and not hasNLATracks(self.object):
             Log("Warning: osgdata::parseAllActions object has no action")
             return anims
-        actions_dict = dict(bpy.data.actions)
-        actions = {key:actions_dict[key] for key in actions_dict if actions_dict[key].users > 0}
-        for action_key in actions:
+
+        actions = getCompatibleActions(self.object)
+        backup_action = None
+        if hasAction(self.object):
+            backup_action = self.object.animation_data.action
+        for action in actions:
             #TODO handle morph here
-            print("parseAllActions: parsing {} ".format(action_key))
+            print("parseAllActions: parsing {} ".format(action.name))
             anim = Animation()
-            action = bpy.data.actions[action_key]
             self.current_action = action
             anim.setName(action.name)
             if isSolidOrRigAction(action):
-                if not (self.object.type != 'ARMATURE' and isRigAction(action)):
-                    parseSolidRigAction()
+               parseSolidRigAction()
             elif hasShapeKeys(self.object):
                 parseMorphAction()
+
+        if backup_action:
+            self.object.animation_data.action = backup_action
 
         return anims
 

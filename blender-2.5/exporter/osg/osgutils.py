@@ -212,6 +212,36 @@ def isObjectMorphAction(action):
 
     return False
 
+def getCompatibleActions(blender_object):
+    actions_dict = dict(bpy.data.actions)
+    actions = [actions_dict[key] for key in actions_dict if actions_dict[key].users > 0 and isCompatibleAction(actions_dict[key], blender_object)]
+    print(actions)
+    return actions
+
+
+def isCompatibleAction(action, blender_object):
+    bones_names = []
+    bone_curves = set()
+    curves_datapaths = list(map(lambda x: x.data_path, action.fcurves))
+    pose_curves = [bonecurve for bonecurve in curves_datapaths if 'pose.bones' in bonecurve]
+    key_curves = [keycurve for keycurve in curves_datapaths if 'key_blocks' in keycurve]
+    # Armature action compatibility: bones curves
+    if not( (pose_curves != []) == (blender_object.type == 'ARMATURE') ):
+        return False
+
+    # Armature action compatibility: bones names mapping
+    if blender_object.type == 'ARMATURE':
+        bones_names = list(map(lambda x: x.name, blender_object.data.bones))
+        bone_curves = set(map(lambda x: x.split('["')[-1].split('"]')[0], pose_curves))
+        if not len(set(bones_names).intersection(bone_curves)):
+            return False
+
+    # Shape key action compatibility
+    if key_curves and not (blender_object.type == 'MESH' and blender_object.data.shape_keys):
+        return False
+
+    return True
+
 
 # OBJECTS HELPERS
 # ------------------------------
